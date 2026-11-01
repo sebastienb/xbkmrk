@@ -1,0 +1,10 @@
+# Optional per-host additions. Copy to docker-compose.override.yml (gitignored,
+# merged automatically by `docker compose`) and keep only what you need.
+
+services:
+  poller:
+    volumes:
+      # Auto-tagging via Codex CLI (LLM_PROVIDER=codex): mount its auth/config.
+      # rw because tokens rotate on refresh. Set CODEX_HOME in .env if yours
+      # lives somewhere other than ~/.codex.
+      - ${CODEX_HOME:-~/.codex}:/root/.codex

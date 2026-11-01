@@ -1,0 +1,77 @@
+# Shared-Postgres deployment example — use an existing pgvector service.
+# Differences from the standalone compose: no dedicated db service/volume; services
+# join the external app_backend network and connect to host "postgres".
+services:
+  poller:
+    build: ./poller
+    container_name: xbm-poller
+    restart: unless-stopped
+    environment:
+      - DATABASE_URL=postgresql://bookmarks:${DB_PASSWORD}@postgres:5432/bookmarks
+      - X_CLIENT_ID=${X_CLIENT_ID}
+      - X_CLIENT_SECRET=${X_CLIENT_SECRET}
+      - X_USER_ID=${X_USER_ID}
+      - X_REDIRECT_URI=${X_REDIRECT_URI:-http://localhost:3022/callback}
+      - EMBEDDING_API_URL=${EMBEDDING_API_URL}
+      - EMBEDDING_API_KEY=${EMBEDDING_API_KEY:-}
+      - EMBEDDING_MODEL=${EMBEDDING_MODEL}
+      - EMBEDDING_DIM=${EMBEDDING_DIM:-768}
+      - SYNC_CRON=${SYNC_CRON:-0 */4 * * *}
+      - SYNC_ON_ACCESS_HOURS=${SYNC_ON_ACCESS_HOURS:-6}
+      - DIGEST_CRON=${DIGEST_CRON:-30 12 * * 5}
+      - TZ=${TZ:-America/New_York}
+      - GITHUB_TOKEN=${GITHUB_TOKEN:-}
+      - REDDIT_CLIENT_ID=${REDDIT_CLIENT_ID:-}
+      - REDDIT_CLIENT_SECRET=${REDDIT_CLIENT_SECRET:-}
+      - TAGGING_MODEL=${TAGGING_MODEL:-}
+      - LLM_PROVIDER=${LLM_PROVIDER:-lmstudio}
+      - CODEX_MODEL=${CODEX_MODEL:-}
+      - CODEX_SANDBOX=${CODEX_SANDBOX:-read-only}
+      - SYNC_LIKES=${SYNC_LIKES:-true}
+      - LIKES_MAX_AGE_DAYS=${LIKES_MAX_AGE_DAYS:-60}
+      - MCP_DB_PASSWORD=${MCP_DB_PASSWORD:-}
+      - DB_PASSWORD=${DB_PASSWORD}
+    volumes:
+      - ./data/media:/app/data/media
+      - ./db/migrations:/app/db/migrations:ro
+    networks: [app_backend]
+
+  web:
+    build: ./web
+    container_name: xbm-web
+    restart: unless-stopped
+    environment:
+      - DATABASE_URL=postgresql://bookmarks:${DB_PASSWORD}@postgres:5432/bookmarks
+      - EMBEDDING_API_URL=${EMBEDDING_API_URL}
+      - EMBEDDING_API_KEY=${EMBEDDING_API_KEY:-}
+      - EMBEDDING_MODEL=${EMBEDDING_MODEL}
+      - EMBEDDING_DIM=${EMBEDDING_DIM:-768}
+      - MEDIA_DIR=/app/data/media
+      - SYNC_ON_ACCESS_HOURS=${SYNC_ON_ACCESS_HOURS:-6}
+      - NEXT_PUBLIC_MCP_PORT=${MCP_PORT:-3021}
+      - TZ=${TZ:-America/New_York}
+    ports:
+      - "${WEB_PORT:-3020}:3000"
+    volumes:
+      - ./data/media:/app/data/media:ro
+    networks: [app_backend]
+
+  mcp:
+    build: ./mcp
+    container_name: xbm-mcp
+    restart: unless-stopped
+    environment:
+      # read-only role; falls back to main creds if MCP_DB_PASSWORD unset
+      - DATABASE_URL=postgresql://bookmarks_ro:${MCP_DB_PASSWORD:-${DB_PASSWORD}}@postgres:5432/bookmarks
+      - EMBEDDING_API_URL=${EMBEDDING_API_URL}
+      - EMBEDDING_API_KEY=${EMBEDDING_API_KEY:-}
+      - EMBEDDING_MODEL=${EMBEDDING_MODEL}
+      - EMBEDDING_DIM=${EMBEDDING_DIM:-768}
+      - PORT=3021
+    ports:
+      - "${MCP_PORT:-3021}:3021"
+    networks: [app_backend]
+
+networks:
+  app_backend:
+    external: true
